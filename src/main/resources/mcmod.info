@@ -5,11 +5,11 @@
   "description": "Allows you to make stuff fight other stuff, inspired by Generikb.",
   "version": "${version}",
   "mcversion": "${mcversion}",
-  "url": "",
+  "url": "https://www.curseforge.com/minecraft/mc-mods/critter-fights",
   "updateUrl": "",
   "authorList": ["its_meow"],
   "credits": "its_meow: for the mod! generikb: for the suggestion and the boars",
-  "logoFile": "",
+  "logoFile": "logo.png",
   "screenshots": [],
   "dependencies": []
 }
