@@ -15,6 +15,7 @@ public class CritterFights {
     @EventHandler
     public void serverInit(FMLServerStartingEvent event) {
         event.registerServerCommand(new CommandCFight());
+        event.registerServerCommand(new CommandCAggro());
     }
 
 }
