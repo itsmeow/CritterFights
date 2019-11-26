@@ -1,12 +1,6 @@
 package its_meow.critterfights;
 
 import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
-
-import javax.annotation.Nullable;
 
 import net.minecraft.command.CommandBase;
 import net.minecraft.command.CommandException;
@@ -14,21 +8,12 @@ import net.minecraft.command.ICommandSender;
 import net.minecraft.command.WrongUsageException;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityCreature;
-import net.minecraft.entity.EntityList;
 import net.minecraft.entity.EntityLiving;
-import net.minecraft.entity.EntityLivingBase;
 import net.minecraft.entity.IEntityLivingData;
-import net.minecraft.entity.SharedMonsterAttributes;
-import net.minecraft.entity.ai.EntityAIAttackMelee;
-import net.minecraft.entity.ai.EntityAIAttackRanged;
-import net.minecraft.entity.ai.EntityAIBase;
-import net.minecraft.entity.ai.EntityAITasks.EntityAITaskEntry;
 import net.minecraft.nbt.JsonToNBT;
 import net.minecraft.nbt.NBTException;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.util.DamageSource;
-import net.minecraft.util.EnumHand;
 import net.minecraft.util.ResourceLocation;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec3d;
@@ -156,44 +141,10 @@ public class CommandCFight extends CommandBase {
         }
     }
 
-    private static void setupAI(double damage, double health, EntityLiving el, EntityLiving target) {
-        el.getAttributeMap().getAttributeInstance(SharedMonsterAttributes.MAX_HEALTH).setBaseValue(health);
-        if(el.getAttributeMap().getAttributeInstance(SharedMonsterAttributes.ATTACK_DAMAGE) == null) {
-            el.getAttributeMap().registerAttribute(SharedMonsterAttributes.ATTACK_DAMAGE);
-        }
-        el.getAttributeMap().getAttributeInstance(SharedMonsterAttributes.ATTACK_DAMAGE).setBaseValue(damage);
+    private static void setupAI(double damage, double health, EntityCreature el, EntityCreature target) {
+        CritterFights.setAttributes(el, damage, health);
+        CritterFights.checkAndAddAttackAI(el);
         el.setAttackTarget(target);
-        if(el instanceof EntityCreature) {
-            boolean containsTask = false;
-            Set<EntityAITaskEntry> keepTasks = new HashSet<EntityAITaskEntry>();
-            for(EntityAITaskEntry taskE : el.tasks.taskEntries) {
-                EntityAIBase ai = taskE.action;
-                if(ai instanceof EntityAIAttackMelee || ai instanceof EntityAIAttackRanged || ai.getClass().getSimpleName().toLowerCase().contains("attack")) {
-                    containsTask = true;
-                    keepTasks.add(taskE);
-                }
-
-            }
-            el.targetTasks.taskEntries.clear();
-            el.tasks.taskEntries.clear();
-            if(containsTask) {
-                for(EntityAITaskEntry taskE : keepTasks) {
-                    el.tasks.addTask(0, taskE.action);
-                }
-            } else {
-                el.tasks.addTask(0, new EntityAIAttackMelee((EntityCreature) el, 1.2D, true) {
-                    protected void checkAndPerformAttack(EntityLivingBase enemy, double distToEnemySqr) {
-                        double d0 = this.getAttackReachSqr(enemy);
-
-                        if(distToEnemySqr <= d0 && this.attackTick <= 0) {
-                            this.attackTick = 20;
-                            this.attacker.swingArm(EnumHand.MAIN_HAND);
-                            enemy.attackEntityFrom(DamageSource.causeMobDamage(target), (float) damage);
-                        }
-                    }
-                });
-            }
-        }
     }
 
     private void setupEntity(ICommandSender sender, World world, boolean flag, double posx, double posy, double posz, Entity entity) throws CommandException {
@@ -216,14 +167,6 @@ public class CommandCFight extends CommandBase {
             notifyCommandListener(sender, this, "commands.summon.success", new Object[0]);
         }
 
-    }
-
-    public List<String> getTabCompletions(MinecraftServer server, ICommandSender sender, String[] args, @Nullable BlockPos targetPos) {
-        if(args.length == 1) {
-            return getListOfStringsMatchingLastWord(args, EntityList.getEntityNameList());
-        } else {
-            return args.length > 1 && args.length <= 4 ? getTabCompletionCoordinate(args, 1, targetPos) : Collections.emptyList();
-        }
     }
 
     public int getRequiredPermissionLevel() {
