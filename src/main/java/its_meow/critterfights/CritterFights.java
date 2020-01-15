@@ -15,9 +15,11 @@ import net.minecraft.entity.ai.EntityAIBase;
 import net.minecraft.entity.ai.EntityAIHurtByTarget;
 import net.minecraft.entity.ai.EntityAITasks;
 import net.minecraft.entity.ai.EntityAITasks.EntityAITaskEntry;
+import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.util.DamageSource;
 import net.minecraft.util.EnumHand;
+import net.minecraft.util.ResourceLocation;
 import net.minecraft.world.chunk.storage.AnvilChunkLoader;
 import net.minecraftforge.event.entity.EntityJoinWorldEvent;
 import net.minecraftforge.fml.common.Mod;
@@ -53,16 +55,21 @@ public class CritterFights {
             entity.getAttributeMap().onAttributeModified(entity.getEntityAttribute(SharedMonsterAttributes.ATTACK_DAMAGE));
             NBTTagCompound tag2 = new NBTTagCompound();
             tag2.setString("id", id);
-            Entity entity2 = AnvilChunkLoader.readWorldEntityPos(tag2.copy(), event.getEntity().world, event.getEntity().posX, event.getEntity().posY, event.getEntity().posZ, false);
-            if(entity2 instanceof EntityLiving) {
-                Class<? extends EntityLiving> targetClass = ((EntityLiving)entity2).getClass();
-                entity2.setDead();
+            if(CritterFights.isPlayerID(id)) {
+                CritterFights.checkAndAddAttackAI(entity);
+                CritterFights.addTargetingAI(entity, EntityPlayer.class);
+            } else {
+                Entity entity2 = AnvilChunkLoader.readWorldEntityPos(tag2.copy(), event.getEntity().world, event.getEntity().posX, event.getEntity().posY, event.getEntity().posZ, false);
                 if(entity2 instanceof EntityLiving) {
-                    CritterFights.checkAndAddAttackAI(entity);
-                    CritterFights.addTargetingAI(entity, targetClass);
+                    Class<? extends EntityLiving> targetClass = ((EntityLiving)entity2).getClass();
+                    entity2.setDead();
+                    if(entity2 instanceof EntityLiving) {
+                        CritterFights.checkAndAddAttackAI(entity);
+                        CritterFights.addTargetingAI(entity, targetClass);
+                    }
+                } else if(entity2 != null) {
+                    entity2.setDead();
                 }
-            } else if(entity2 != null) {
-                entity2.setDead();
             }
         }
     }
@@ -90,6 +97,14 @@ public class CritterFights {
     public static void addTargetingAI(EntityCreature el, Class<? extends EntityLivingBase> targetClass) {
         el.targetTasks.addTask(0, new EntityAIAggressiveTargeting<>((EntityCreature) el, targetClass, false));
         el.targetTasks.addTask(1, new EntityAIHurtByTarget((EntityCreature) el, false, new Class[0]));
+    }
+    
+    public static boolean isValidEntity(String id) {
+        return id.equalsIgnoreCase("player") || id.equalsIgnoreCase("minecraft:player") || net.minecraftforge.fml.common.registry.ForgeRegistries.ENTITIES.containsKey(new ResourceLocation(id));
+    }
+    
+    public static boolean isPlayerID(String id) {
+        return id.equalsIgnoreCase("player") || id.equalsIgnoreCase("minecraft:player");
     }
 
     public static void checkAndAddAttackAI(EntityCreature el) {

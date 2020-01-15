@@ -11,11 +11,11 @@ import net.minecraft.entity.EntityCreature;
 import net.minecraft.entity.EntityLiving;
 import net.minecraft.entity.EntityLivingBase;
 import net.minecraft.entity.IEntityLivingData;
+import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.nbt.JsonToNBT;
 import net.minecraft.nbt.NBTException;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.util.ResourceLocation;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.World;
@@ -66,7 +66,7 @@ public class CommandCAggro extends CommandBase {
                         tag = JsonToNBT.getTagFromJson(s1);
                         flag = true;
                     } catch(NBTException nbtexception) {
-                        if(net.minecraftforge.fml.common.registry.ForgeRegistries.ENTITIES.containsKey(new ResourceLocation(args[6]))) {
+                        if(CritterFights.isValidEntity(args[6])) {
                             tag2.setString("id", args[6]);
                             flag = false;
                             tag = new NBTTagCompound();
@@ -79,15 +79,15 @@ public class CommandCAggro extends CommandBase {
                     for(int i = 0; i < args.length; i++) {
                         String arg = args[i];
                         if(i >= 6) {
-                            if(net.minecraftforge.fml.common.registry.ForgeRegistries.ENTITIES.containsKey(new ResourceLocation(arg))) {
+                            if(CritterFights.isValidEntity(arg)) {
                                 trimTo = i;
                             }
                         }
                     }
                     String[] argsT = (String[]) Arrays.copyOfRange(args, 0, trimTo);
-                    if(net.minecraftforge.fml.common.registry.ForgeRegistries.ENTITIES.containsKey(new ResourceLocation(args[6]))) {
+                    if(CritterFights.isValidEntity(args[6])) {
                         tag2.setString("id", args[6]);
-                    } else if(net.minecraftforge.fml.common.registry.ForgeRegistries.ENTITIES.containsKey(new ResourceLocation(args[7]))) {
+                    } else if(CritterFights.isValidEntity(args[7])) {
                         tag2.setString("id", args[7]);
                         String s1 = buildString(argsT, 6);
 
@@ -107,16 +107,24 @@ public class CommandCAggro extends CommandBase {
                 }
                 Entity entity = AnvilChunkLoader.readWorldEntityPos(tag.copy(), world, posx, posy, posz, true);
                 setupEntity(sender, world, flag, posx, posy, posz, entity);
-                Entity entity2 = AnvilChunkLoader.readWorldEntityPos(tag2.copy(), world, posx, posy, posz, false);
-                if(entity != null) {
-                    if(entity2 instanceof EntityLiving) {
-                        Class<? extends EntityLiving> targetClass = ((EntityLiving)entity2).getClass();
-                        entity2.setDead();
-                        if(entity instanceof EntityCreature && entity2 instanceof EntityLiving) {
-                            setupAI(damage, health, (EntityCreature) entity, targetClass, tag2.getString("id"));
+                if(CritterFights.isPlayerID(tag2.getString("id"))) {
+                    if(entity != null) {
+                        if(entity instanceof EntityCreature) {
+                            setupAI(damage, health, (EntityCreature) entity, EntityPlayer.class, tag2.getString("id").toLowerCase());
                         }
-                    } else if(entity2 != null) {
-                        entity2.setDead();
+                    }
+                } else {
+                    Entity entity2 = AnvilChunkLoader.readWorldEntityPos(tag2.copy(), world, posx, posy, posz, false);
+                    if(entity != null) {
+                        if(entity2 instanceof EntityLiving) {
+                            Class<? extends EntityLiving> targetClass = ((EntityLiving)entity2).getClass();
+                            entity2.setDead();
+                            if(entity instanceof EntityCreature && entity2 instanceof EntityLiving) {
+                                setupAI(damage, health, (EntityCreature) entity, targetClass, tag2.getString("id"));
+                            }
+                        } else if(entity2 != null) {
+                            entity2.setDead();
+                        }
                     }
                 }
             }
