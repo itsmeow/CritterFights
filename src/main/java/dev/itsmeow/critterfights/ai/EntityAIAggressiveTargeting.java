@@ -1,4 +1,4 @@
-package its_meow.critterfights.ai;
+package dev.itsmeow.critterfights.ai;
 
 import java.util.Collections;
 import java.util.List;
@@ -32,7 +32,7 @@ public class EntityAIAggressiveTargeting<T extends EntityLivingBase> extends Ent
             return this.targetEntity != null;
             
         } else {
-            List<T> list = this.taskOwner.world.<T>getEntitiesWithinAABB(this.targetClass, this.taskOwner.getEntityBoundingBox().grow(4D), e -> e != this.taskOwner && EntitySelectors.NOT_SPECTATING.apply(e));
+            List<T> list = this.taskOwner.world.<T>getEntitiesWithinAABB(this.targetClass, this.taskOwner.getEntityBoundingBox().grow(10D), e -> e != this.taskOwner && EntitySelectors.NOT_SPECTATING.apply(e));
 
             if(list.isEmpty()) {
                 return false;

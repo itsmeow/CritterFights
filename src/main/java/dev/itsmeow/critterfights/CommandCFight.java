@@ -1,4 +1,4 @@
-package its_meow.critterfights;
+package dev.itsmeow.critterfights;
 
 import java.util.Arrays;
 

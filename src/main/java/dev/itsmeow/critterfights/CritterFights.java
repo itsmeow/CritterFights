@@ -1,9 +1,9 @@
-package its_meow.critterfights;
+package dev.itsmeow.critterfights;
 
 import java.util.HashSet;
 import java.util.Set;
 
-import its_meow.critterfights.ai.EntityAIAggressiveTargeting;
+import dev.itsmeow.critterfights.ai.EntityAIAggressiveTargeting;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityCreature;
 import net.minecraft.entity.EntityLiving;
