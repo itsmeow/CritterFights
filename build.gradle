@@ -1,1 +1,1 @@
-apply from: 'https://maven.itsmeow.dev/scripts/fg2.3.gradle'
+apply from: 'https://maven.itsmeow.dev/scripts/fg3.gradle'

@@ -1,0 +1,19 @@
+modLoader="javafml"
+loaderVersion="[34,)"
+displayURL="https://www.curseforge.com/minecraft/mc-mods/critter-fights"
+logoFile="logo.png"
+credits="itsmeow for Programming, generikb for the suggestion and the boars"
+authors="itsmeow"
+license="MIT"
+[[mods]]
+modId="critterfights"
+version="${file.jarVersion}"
+displayName="Critter Fights"
+description='''
+Allows you to make stuff fight other stuff, inspired by Generikb.'''
+[[dependencies.critterfights]]
+modId="forge"
+mandatory=true
+versionRange="[34.1.0,)"
+ordering="NONE"
+side="BOTH"
