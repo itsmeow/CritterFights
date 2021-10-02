@@ -1,10 +1,1 @@
 apply from: 'https://maven.itsmeow.dev/scripts/fg3.gradle'
-repositories {
-    maven {
-        url = "https://cursemaven.com"
-    }
-}
-dependencies {
-    runtimeOnly fg.deobf("curse.maven:citadel-331936:${project.citadel_version}")
-    runtimeOnly fg.deobf("curse.maven:alexs-mobs-426558:${project.alexs_mobs_version}")
-}
