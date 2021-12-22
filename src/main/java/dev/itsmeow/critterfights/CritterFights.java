@@ -459,7 +459,7 @@ public class CritterFights {
             if(CritterFights.isPlayerID(targetType)) {
                 CritterFights.setAttributes(el, damage, health);
                 CritterFights.checkAndAddAttackAI(el);
-                CritterFights.addTargetingAI(el, PlayerEntity.class);
+                CritterFights.addTargetingAI(el, PlayerEntity.class, false);
                 CritterFights.addAITag(el, targetType);
             } else {
                 CompoundNBT tag2 = new CompoundNBT();
@@ -470,7 +470,7 @@ public class CritterFights {
                     entity2.remove();
                     CritterFights.setAttributes(el, damage, health);
                     CritterFights.checkAndAddAttackAI(el);
-                    CritterFights.addTargetingAI(el, targetClass);
+                    CritterFights.addTargetingAI(el, targetClass, false);
                     CritterFights.addAITag(el, targetType);
                 } else if(entity2 != null) {
                     entity2.remove();
@@ -497,9 +497,10 @@ public class CritterFights {
             } else {
                 entity.getAttribute(Attributes.ATTACK_DAMAGE).setBaseValue(damage);
             }
+            boolean priorityHurt = CritterFights.getPriorityTag(entity);
             if(CritterFights.isPlayerID(id)) {
                 CritterFights.checkAndAddAttackAI(entity);
-                CritterFights.addTargetingAI(entity, PlayerEntity.class);
+                CritterFights.addTargetingAI(entity, PlayerEntity.class, priorityHurt);
             } else {
                 CompoundNBT tag2 = new CompoundNBT();
                 tag2.putString("id", id);
@@ -511,7 +512,7 @@ public class CritterFights {
                     Class<? extends LivingEntity> targetClass = ((LivingEntity)entity2).getClass();
                     entity2.remove();
                     CritterFights.checkAndAddAttackAI(entity);
-                    CritterFights.addTargetingAI(entity, targetClass);
+                    CritterFights.addTargetingAI(entity, targetClass, priorityHurt);
                 } else if(entity2 != null) {
                     entity2.remove();
                 }
@@ -539,9 +540,13 @@ public class CritterFights {
         return e.getPersistentData().getFloat("critterfights_dmg");
     }
 
-    public static <T extends LivingEntity> void addTargetingAI(CreatureEntity entity, Class<T> targetClass) {
-        entity.targetSelector.addGoal(0, new NearestAttackableTargetGoal<>(entity, targetClass, 0, false, false, e -> true));
-        entity.targetSelector.addGoal(1, new HurtByTargetGoal(entity));
+    public static boolean getPriorityTag(Entity e) {
+        return e.getPersistentData().getBoolean("critterfights_hurtpriority");
+    }
+
+    public static <T extends LivingEntity> void addTargetingAI(CreatureEntity entity, Class<T> targetClass, boolean priorityHurt) {
+        entity.targetSelector.addGoal(priorityHurt ? 1 : 0, new NearestAttackableTargetGoal<>(entity, targetClass, 0, false, false, e -> true));
+        entity.targetSelector.addGoal(priorityHurt ? 0 : 1, new HurtByTargetGoal(entity));
     }
 
     public static boolean isPlayerID(ResourceLocation id) {
