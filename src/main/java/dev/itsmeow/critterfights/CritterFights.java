@@ -1,27 +1,26 @@
 package dev.itsmeow.critterfights;
 
 import com.mojang.brigadier.CommandDispatcher;
-import com.mojang.brigadier.StringReader;
-import com.mojang.brigadier.arguments.ArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.exceptions.DynamicCommandExceptionType;
 import com.mojang.brigadier.suggestion.SuggestionProvider;
 import net.minecraft.Util;
+import net.minecraft.commands.CommandBuildContext;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.SharedSuggestionProvider;
 import net.minecraft.commands.arguments.CompoundTagArgument;
-import net.minecraft.commands.arguments.EntitySummonArgument;
+import net.minecraft.commands.arguments.ResourceArgument;
 import net.minecraft.commands.arguments.coordinates.Vec3Argument;
-import net.minecraft.commands.synchronization.ArgumentTypes;
-import net.minecraft.commands.synchronization.EmptyArgumentSerializer;
 import net.minecraft.commands.synchronization.SuggestionProviders;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Holder;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.network.chat.TextComponent;
-import net.minecraft.network.chat.TranslatableComponent;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.damagesource.DamageSource;
@@ -34,15 +33,11 @@ import net.minecraft.world.entity.ai.goal.target.NearestAttackableTargetGoal;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.event.RegisterCommandsEvent;
-import net.minecraftforge.event.entity.EntityJoinWorldEvent;
+import net.minecraftforge.event.entity.EntityJoinLevelEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
-import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
-import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
 import net.minecraftforge.registries.ForgeRegistries;
 
-import java.util.Arrays;
-import java.util.Collection;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -52,132 +47,129 @@ public class CritterFights {
 
     public static final String MODID = "critterfights";
 
-    public CritterFights() {
-        FMLJavaModLoadingContext.get().getModEventBus().addListener(this::setup);
-    }
-
     @SubscribeEvent
     public static void registerCommands(RegisterCommandsEvent event) {
         CommandDispatcher<CommandSourceStack> d = event.getDispatcher();
+
         // I hate Brigadier. God forgive me for this absolute spaghetti I have been forced to make
         d.register(Commands.literal("cfight").requires(source -> source.hasPermission(2))
                 .then(Commands.argument("pos", Vec3Argument.vec3())
                         // ENTITY 1 - WITH POS
-                        .then(Commands.argument("entity", EntitySummonArgument.id()).suggests(SuggestionProviders.SUMMONABLE_ENTITIES)
-                                .executes(c -> CommandCFight.cfight(c.getSource(), Vec3Argument.getVec3(c, "pos"), EntitySummonArgument.getSummonableEntity(c, "entity")))
+                        .then(Commands.argument("entity", ResourceArgument.resource(event.getBuildContext(), Registries.ENTITY_TYPE)).suggests(SuggestionProviders.SUMMONABLE_ENTITIES)
+                                .executes(c -> CommandCFight.cfight(c.getSource(), Vec3Argument.getVec3(c, "pos"), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity")))
                                 // ENTITY 1 NBT
                                 .then(Commands.argument("nbt", CompoundTagArgument.compoundTag())
-                                        .executes(c -> CommandCFight.cfight(c.getSource(), Vec3Argument.getVec3(c, "pos"), EntitySummonArgument.getSummonableEntity(c, "entity"), CompoundTagArgument.getCompoundTag(c, "nbt")))
+                                        .executes(c -> CommandCFight.cfight(c.getSource(), Vec3Argument.getVec3(c, "pos"), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity"), CompoundTagArgument.getCompoundTag(c, "nbt")))
                                         // ENTITY 2 CHAIN - ENTITY 1 NBT
-                                        .then(Commands.argument("entity2", EntitySummonArgument.id()).suggests(SuggestionProviders.SUMMONABLE_ENTITIES)
-                                                .executes(c -> CommandCFight.cfight(c.getSource(), Vec3Argument.getVec3(c, "pos"), EntitySummonArgument.getSummonableEntity(c, "entity"), CompoundTagArgument.getCompoundTag(c, "nbt"), EntitySummonArgument.getSummonableEntity(c, "entity2")))
+                                        .then(Commands.argument("entity2", ResourceArgument.resource(event.getBuildContext(), Registries.ENTITY_TYPE)).suggests(SuggestionProviders.SUMMONABLE_ENTITIES)
+                                                .executes(c -> CommandCFight.cfight(c.getSource(), Vec3Argument.getVec3(c, "pos"), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity"), CompoundTagArgument.getCompoundTag(c, "nbt"), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity2")))
                                                 // ENTITY 2 NBT
                                                 .then(Commands.argument("nbt2", CompoundTagArgument.compoundTag())
-                                                        .executes(c -> CommandCFight.cfight(c.getSource(), Vec3Argument.getVec3(c, "pos"), EntitySummonArgument.getSummonableEntity(c, "entity"), CompoundTagArgument.getCompoundTag(c, "nbt"), EntitySummonArgument.getSummonableEntity(c, "entity2"), CompoundTagArgument.getCompoundTag(c, "nbt2")))
+                                                        .executes(c -> CommandCFight.cfight(c.getSource(), Vec3Argument.getVec3(c, "pos"), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity"), CompoundTagArgument.getCompoundTag(c, "nbt"), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity2"), CompoundTagArgument.getCompoundTag(c, "nbt2")))
                                                         // HEALTH & DAMAGE
                                                         .then(Commands.argument("health", IntegerArgumentType.integer(1))
-                                                                .executes(c -> CommandCFight.cfight(c.getSource(), Vec3Argument.getVec3(c, "pos"), EntitySummonArgument.getSummonableEntity(c, "entity"), CompoundTagArgument.getCompoundTag(c, "nbt"), EntitySummonArgument.getSummonableEntity(c, "entity2"), CompoundTagArgument.getCompoundTag(c, "nbt2"), IntegerArgumentType.getInteger(c, "health")))
+                                                                .executes(c -> CommandCFight.cfight(c.getSource(), Vec3Argument.getVec3(c, "pos"), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity"), CompoundTagArgument.getCompoundTag(c, "nbt"), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity2"), CompoundTagArgument.getCompoundTag(c, "nbt2"), IntegerArgumentType.getInteger(c, "health")))
                                                                 .then(Commands.argument("damage", IntegerArgumentType.integer(1))
-                                                                        .executes(c -> CommandCFight.cfight(c.getSource(), Vec3Argument.getVec3(c, "pos"), EntitySummonArgument.getSummonableEntity(c, "entity"), CompoundTagArgument.getCompoundTag(c, "nbt"), EntitySummonArgument.getSummonableEntity(c, "entity2"), CompoundTagArgument.getCompoundTag(c, "nbt2"), IntegerArgumentType.getInteger(c, "health"), IntegerArgumentType.getInteger(c, "damage")))
+                                                                        .executes(c -> CommandCFight.cfight(c.getSource(), Vec3Argument.getVec3(c, "pos"), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity"), CompoundTagArgument.getCompoundTag(c, "nbt"), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity2"), CompoundTagArgument.getCompoundTag(c, "nbt2"), IntegerArgumentType.getInteger(c, "health"), IntegerArgumentType.getInteger(c, "damage")))
                                                                 )
                                                         )
                                                 )
                                                 // HEALTH & DAMAGE
                                                 .then(Commands.argument("health", IntegerArgumentType.integer(1))
-                                                        .executes(c -> CommandCFight.cfight(c.getSource(), Vec3Argument.getVec3(c, "pos"), EntitySummonArgument.getSummonableEntity(c, "entity"), CompoundTagArgument.getCompoundTag(c, "nbt"), EntitySummonArgument.getSummonableEntity(c, "entity2"), null, IntegerArgumentType.getInteger(c, "health")))
+                                                        .executes(c -> CommandCFight.cfight(c.getSource(), Vec3Argument.getVec3(c, "pos"), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity"), CompoundTagArgument.getCompoundTag(c, "nbt"), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity2"), null, IntegerArgumentType.getInteger(c, "health")))
                                                         .then(Commands.argument("damage", IntegerArgumentType.integer(1))
-                                                                .executes(c -> CommandCFight.cfight(c.getSource(), Vec3Argument.getVec3(c, "pos"), EntitySummonArgument.getSummonableEntity(c, "entity"), CompoundTagArgument.getCompoundTag(c, "nbt"), EntitySummonArgument.getSummonableEntity(c, "entity2"), null, IntegerArgumentType.getInteger(c, "health"), IntegerArgumentType.getInteger(c, "damage")))
+                                                                .executes(c -> CommandCFight.cfight(c.getSource(), Vec3Argument.getVec3(c, "pos"), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity"), CompoundTagArgument.getCompoundTag(c, "nbt"), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity2"), null, IntegerArgumentType.getInteger(c, "health"), IntegerArgumentType.getInteger(c, "damage")))
                                                         )
                                                 )
                                         )
                                 )
                                 // ENTITY 2 CHAIN - NO ENTITY 1 NBT
-                                .then(Commands.argument("entity2", EntitySummonArgument.id()).suggests(SuggestionProviders.SUMMONABLE_ENTITIES)
-                                        .executes(c -> CommandCFight.cfight(c.getSource(), Vec3Argument.getVec3(c, "pos"), EntitySummonArgument.getSummonableEntity(c, "entity"), EntitySummonArgument.getSummonableEntity(c, "entity2")))
+                                .then(Commands.argument("entity2", ResourceArgument.resource(event.getBuildContext(), Registries.ENTITY_TYPE)).suggests(SuggestionProviders.SUMMONABLE_ENTITIES)
+                                        .executes(c -> CommandCFight.cfight(c.getSource(), Vec3Argument.getVec3(c, "pos"), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity"), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity2")))
                                         // ENTITY 2 NBT
                                         .then(Commands.argument("nbt2", CompoundTagArgument.compoundTag())
-                                                .executes(c -> CommandCFight.cfight(c.getSource(), Vec3Argument.getVec3(c, "pos"), EntitySummonArgument.getSummonableEntity(c, "entity"), EntitySummonArgument.getSummonableEntity(c, "entity2"), CompoundTagArgument.getCompoundTag(c, "nbt2")))
+                                                .executes(c -> CommandCFight.cfight(c.getSource(), Vec3Argument.getVec3(c, "pos"), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity"), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity2"), CompoundTagArgument.getCompoundTag(c, "nbt2")))
                                                 // HEALTH & DAMAGE
                                                 .then(Commands.argument("health", IntegerArgumentType.integer(1))
-                                                        .executes(c -> CommandCFight.cfight(c.getSource(), Vec3Argument.getVec3(c, "pos"), EntitySummonArgument.getSummonableEntity(c, "entity"), null, EntitySummonArgument.getSummonableEntity(c, "entity2"), CompoundTagArgument.getCompoundTag(c, "nbt2"), IntegerArgumentType.getInteger(c, "health")))
+                                                        .executes(c -> CommandCFight.cfight(c.getSource(), Vec3Argument.getVec3(c, "pos"), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity"), null, CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity2"), CompoundTagArgument.getCompoundTag(c, "nbt2"), IntegerArgumentType.getInteger(c, "health")))
                                                         .then(Commands.argument("damage", IntegerArgumentType.integer(1))
-                                                                .executes(c -> CommandCFight.cfight(c.getSource(), Vec3Argument.getVec3(c, "pos"), EntitySummonArgument.getSummonableEntity(c, "entity"), null, EntitySummonArgument.getSummonableEntity(c, "entity2"), CompoundTagArgument.getCompoundTag(c, "nbt2"), IntegerArgumentType.getInteger(c, "health"), IntegerArgumentType.getInteger(c, "damage")))
+                                                                .executes(c -> CommandCFight.cfight(c.getSource(), Vec3Argument.getVec3(c, "pos"), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity"), null, CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity2"), CompoundTagArgument.getCompoundTag(c, "nbt2"), IntegerArgumentType.getInteger(c, "health"), IntegerArgumentType.getInteger(c, "damage")))
                                                         )
                                                 )
                                         )
                                         // HEALTH & DAMAGE
                                         .then(Commands.argument("health", IntegerArgumentType.integer(1))
-                                                .executes(c -> CommandCFight.cfight(c.getSource(), Vec3Argument.getVec3(c, "pos"), EntitySummonArgument.getSummonableEntity(c, "entity"), null, EntitySummonArgument.getSummonableEntity(c, "entity2"), null, IntegerArgumentType.getInteger(c, "health")))
+                                                .executes(c -> CommandCFight.cfight(c.getSource(), Vec3Argument.getVec3(c, "pos"), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity"), null, CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity2"), null, IntegerArgumentType.getInteger(c, "health")))
                                                 .then(Commands.argument("damage", IntegerArgumentType.integer(1))
-                                                        .executes(c -> CommandCFight.cfight(c.getSource(), Vec3Argument.getVec3(c, "pos"), EntitySummonArgument.getSummonableEntity(c, "entity"), null, EntitySummonArgument.getSummonableEntity(c, "entity2"), null, IntegerArgumentType.getInteger(c, "health"), IntegerArgumentType.getInteger(c, "damage")))
+                                                        .executes(c -> CommandCFight.cfight(c.getSource(), Vec3Argument.getVec3(c, "pos"), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity"), null, CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity2"), null, IntegerArgumentType.getInteger(c, "health"), IntegerArgumentType.getInteger(c, "damage")))
                                                 )
                                         )
                                 )
                                 // HEALTH & DAMAGE
                                 .then(Commands.argument("health", IntegerArgumentType.integer(1))
-                                        .executes(c -> CommandCFight.cfight(c.getSource(), Vec3Argument.getVec3(c, "pos"), EntitySummonArgument.getSummonableEntity(c, "entity"), IntegerArgumentType.getInteger(c, "health")))
+                                        .executes(c -> CommandCFight.cfight(c.getSource(), Vec3Argument.getVec3(c, "pos"), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity"), IntegerArgumentType.getInteger(c, "health")))
                                         .then(Commands.argument("damage", IntegerArgumentType.integer(1))
-                                                .executes(c -> CommandCFight.cfight(c.getSource(), Vec3Argument.getVec3(c, "pos"), EntitySummonArgument.getSummonableEntity(c, "entity"), IntegerArgumentType.getInteger(c, "health"), IntegerArgumentType.getInteger(c, "damage")))
+                                                .executes(c -> CommandCFight.cfight(c.getSource(), Vec3Argument.getVec3(c, "pos"), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity"), IntegerArgumentType.getInteger(c, "health"), IntegerArgumentType.getInteger(c, "damage")))
                                         )
                                 )
                         )
                 )
                 // ENTITY 1 - NO POS
-                .then(Commands.argument("entity", EntitySummonArgument.id()).suggests(SuggestionProviders.SUMMONABLE_ENTITIES)
-                        .executes(c -> CommandCFight.cfight(c.getSource(), c.getSource().getPosition(), EntitySummonArgument.getSummonableEntity(c, "entity")))
+                .then(Commands.argument("entity", ResourceArgument.resource(event.getBuildContext(), Registries.ENTITY_TYPE)).suggests(SuggestionProviders.SUMMONABLE_ENTITIES)
+                        .executes(c -> CommandCFight.cfight(c.getSource(), c.getSource().getPosition(), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity")))
                         // ENTITY 1 NBT
                         .then(Commands.argument("nbt", CompoundTagArgument.compoundTag())
-                                .executes(c -> CommandCFight.cfight(c.getSource(), c.getSource().getPosition(), EntitySummonArgument.getSummonableEntity(c, "entity"), CompoundTagArgument.getCompoundTag(c, "nbt")))
+                                .executes(c -> CommandCFight.cfight(c.getSource(), c.getSource().getPosition(), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity"), CompoundTagArgument.getCompoundTag(c, "nbt")))
                                 // ENTITY 2 CHAIN - ENTITY 1 NBT
-                                .then(Commands.argument("entity2", EntitySummonArgument.id()).suggests(SuggestionProviders.SUMMONABLE_ENTITIES)
-                                        .executes(c -> CommandCFight.cfight(c.getSource(), c.getSource().getPosition(), EntitySummonArgument.getSummonableEntity(c, "entity"), CompoundTagArgument.getCompoundTag(c, "nbt"), EntitySummonArgument.getSummonableEntity(c, "entity2")))
+                                .then(Commands.argument("entity2", ResourceArgument.resource(event.getBuildContext(), Registries.ENTITY_TYPE)).suggests(SuggestionProviders.SUMMONABLE_ENTITIES)
+                                        .executes(c -> CommandCFight.cfight(c.getSource(), c.getSource().getPosition(), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity"), CompoundTagArgument.getCompoundTag(c, "nbt"), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity2")))
                                         // ENTITY 2 NBT
                                         .then(Commands.argument("nbt2", CompoundTagArgument.compoundTag())
-                                                .executes(c -> CommandCFight.cfight(c.getSource(), c.getSource().getPosition(), EntitySummonArgument.getSummonableEntity(c, "entity"), CompoundTagArgument.getCompoundTag(c, "nbt"), EntitySummonArgument.getSummonableEntity(c, "entity2"), CompoundTagArgument.getCompoundTag(c, "nbt2")))
+                                                .executes(c -> CommandCFight.cfight(c.getSource(), c.getSource().getPosition(), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity"), CompoundTagArgument.getCompoundTag(c, "nbt"), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity2"), CompoundTagArgument.getCompoundTag(c, "nbt2")))
                                                 // HEALTH & DAMAGE
                                                 .then(Commands.argument("health", IntegerArgumentType.integer(1))
-                                                        .executes(c -> CommandCFight.cfight(c.getSource(), c.getSource().getPosition(), EntitySummonArgument.getSummonableEntity(c, "entity"), CompoundTagArgument.getCompoundTag(c, "nbt"), EntitySummonArgument.getSummonableEntity(c, "entity2"), CompoundTagArgument.getCompoundTag(c, "nbt2"), IntegerArgumentType.getInteger(c, "health")))
+                                                        .executes(c -> CommandCFight.cfight(c.getSource(), c.getSource().getPosition(), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity"), CompoundTagArgument.getCompoundTag(c, "nbt"), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity2"), CompoundTagArgument.getCompoundTag(c, "nbt2"), IntegerArgumentType.getInteger(c, "health")))
                                                         .then(Commands.argument("damage", IntegerArgumentType.integer(1))
-                                                                .executes(c -> CommandCFight.cfight(c.getSource(), c.getSource().getPosition(), EntitySummonArgument.getSummonableEntity(c, "entity"), CompoundTagArgument.getCompoundTag(c, "nbt"), EntitySummonArgument.getSummonableEntity(c, "entity2"), CompoundTagArgument.getCompoundTag(c, "nbt2"), IntegerArgumentType.getInteger(c, "health"), IntegerArgumentType.getInteger(c, "damage")))
+                                                                .executes(c -> CommandCFight.cfight(c.getSource(), c.getSource().getPosition(), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity"), CompoundTagArgument.getCompoundTag(c, "nbt"), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity2"), CompoundTagArgument.getCompoundTag(c, "nbt2"), IntegerArgumentType.getInteger(c, "health"), IntegerArgumentType.getInteger(c, "damage")))
                                                         )
                                                 )
                                         )
                                         // HEALTH & DAMAGE
                                         .then(Commands.argument("health", IntegerArgumentType.integer(1))
-                                                .executes(c -> CommandCFight.cfight(c.getSource(), c.getSource().getPosition(), EntitySummonArgument.getSummonableEntity(c, "entity"), CompoundTagArgument.getCompoundTag(c, "nbt"), EntitySummonArgument.getSummonableEntity(c, "entity2"), null, IntegerArgumentType.getInteger(c, "health")))
+                                                .executes(c -> CommandCFight.cfight(c.getSource(), c.getSource().getPosition(), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity"), CompoundTagArgument.getCompoundTag(c, "nbt"), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity2"), null, IntegerArgumentType.getInteger(c, "health")))
                                                 .then(Commands.argument("damage", IntegerArgumentType.integer(1))
-                                                        .executes(c -> CommandCFight.cfight(c.getSource(), c.getSource().getPosition(), EntitySummonArgument.getSummonableEntity(c, "entity"), CompoundTagArgument.getCompoundTag(c, "nbt"), EntitySummonArgument.getSummonableEntity(c, "entity2"), null, IntegerArgumentType.getInteger(c, "health"), IntegerArgumentType.getInteger(c, "damage")))
+                                                        .executes(c -> CommandCFight.cfight(c.getSource(), c.getSource().getPosition(), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity"), CompoundTagArgument.getCompoundTag(c, "nbt"), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity2"), null, IntegerArgumentType.getInteger(c, "health"), IntegerArgumentType.getInteger(c, "damage")))
                                                 )
                                         )
                                 )
                         )
                         // ENTITY 2 CHAIN - NO ENTITY 1 NBT
-                        .then(Commands.argument("entity2", EntitySummonArgument.id()).suggests(SuggestionProviders.SUMMONABLE_ENTITIES)
-                                .executes(c -> CommandCFight.cfight(c.getSource(), c.getSource().getPosition(), EntitySummonArgument.getSummonableEntity(c, "entity"), EntitySummonArgument.getSummonableEntity(c, "entity2")))
+                        .then(Commands.argument("entity2", ResourceArgument.resource(event.getBuildContext(), Registries.ENTITY_TYPE)).suggests(SuggestionProviders.SUMMONABLE_ENTITIES)
+                                .executes(c -> CommandCFight.cfight(c.getSource(), c.getSource().getPosition(), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity"), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity2")))
                                 // ENTITY 2 NBT
                                 .then(Commands.argument("nbt2", CompoundTagArgument.compoundTag())
-                                        .executes(c -> CommandCFight.cfight(c.getSource(), c.getSource().getPosition(), EntitySummonArgument.getSummonableEntity(c, "entity"), EntitySummonArgument.getSummonableEntity(c, "entity2"), CompoundTagArgument.getCompoundTag(c, "nbt2")))
+                                        .executes(c -> CommandCFight.cfight(c.getSource(), c.getSource().getPosition(), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity"), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity2"), CompoundTagArgument.getCompoundTag(c, "nbt2")))
                                         // HEALTH & DAMAGE
                                         .then(Commands.argument("health", IntegerArgumentType.integer(1))
-                                                .executes(c -> CommandCFight.cfight(c.getSource(), c.getSource().getPosition(), EntitySummonArgument.getSummonableEntity(c, "entity"), null, EntitySummonArgument.getSummonableEntity(c, "entity2"), CompoundTagArgument.getCompoundTag(c, "nbt2"), IntegerArgumentType.getInteger(c, "health")))
+                                                .executes(c -> CommandCFight.cfight(c.getSource(), c.getSource().getPosition(), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity"), null, CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity2"), CompoundTagArgument.getCompoundTag(c, "nbt2"), IntegerArgumentType.getInteger(c, "health")))
                                                 .then(Commands.argument("damage", IntegerArgumentType.integer(1))
-                                                        .executes(c -> CommandCFight.cfight(c.getSource(), c.getSource().getPosition(), EntitySummonArgument.getSummonableEntity(c, "entity"), null, EntitySummonArgument.getSummonableEntity(c, "entity2"), CompoundTagArgument.getCompoundTag(c, "nbt2"), IntegerArgumentType.getInteger(c, "health"), IntegerArgumentType.getInteger(c, "damage")))
+                                                        .executes(c -> CommandCFight.cfight(c.getSource(), c.getSource().getPosition(), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity"), null, CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity2"), CompoundTagArgument.getCompoundTag(c, "nbt2"), IntegerArgumentType.getInteger(c, "health"), IntegerArgumentType.getInteger(c, "damage")))
                                                 )
                                         )
                                 )
                                 // HEALTH & DAMAGE
                                 .then(Commands.argument("health", IntegerArgumentType.integer(1))
-                                        .executes(c -> CommandCFight.cfight(c.getSource(), c.getSource().getPosition(), EntitySummonArgument.getSummonableEntity(c, "entity"), null, EntitySummonArgument.getSummonableEntity(c, "entity2"), null, IntegerArgumentType.getInteger(c, "health")))
+                                        .executes(c -> CommandCFight.cfight(c.getSource(), c.getSource().getPosition(), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity"), null, CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity2"), null, IntegerArgumentType.getInteger(c, "health")))
                                         .then(Commands.argument("damage", IntegerArgumentType.integer(1))
-                                                .executes(c -> CommandCFight.cfight(c.getSource(), c.getSource().getPosition(), EntitySummonArgument.getSummonableEntity(c, "entity"), null, EntitySummonArgument.getSummonableEntity(c, "entity2"), null, IntegerArgumentType.getInteger(c, "health"), IntegerArgumentType.getInteger(c, "damage")))
+                                                .executes(c -> CommandCFight.cfight(c.getSource(), c.getSource().getPosition(), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity"), null, CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity2"), null, IntegerArgumentType.getInteger(c, "health"), IntegerArgumentType.getInteger(c, "damage")))
                                         )
                                 )
                         )
                         // HEALTH & DAMAGE
                         .then(Commands.argument("health", IntegerArgumentType.integer(1))
-                                .executes(c -> CommandCFight.cfight(c.getSource(), c.getSource().getPosition(), EntitySummonArgument.getSummonableEntity(c, "entity"), IntegerArgumentType.getInteger(c, "health")))
+                                .executes(c -> CommandCFight.cfight(c.getSource(), c.getSource().getPosition(), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity"), IntegerArgumentType.getInteger(c, "health")))
                                 .then(Commands.argument("damage", IntegerArgumentType.integer(1))
-                                        .executes(c -> CommandCFight.cfight(c.getSource(), c.getSource().getPosition(), EntitySummonArgument.getSummonableEntity(c, "entity"), IntegerArgumentType.getInteger(c, "health"), IntegerArgumentType.getInteger(c, "damage")))
+                                        .executes(c -> CommandCFight.cfight(c.getSource(), c.getSource().getPosition(), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity"), IntegerArgumentType.getInteger(c, "health"), IntegerArgumentType.getInteger(c, "damage")))
                                 )
                         )
                 )
@@ -186,77 +178,77 @@ public class CritterFights {
         d.register(Commands.literal("caggro").requires(source -> source.hasPermission(2))
                 .then(Commands.argument("pos", Vec3Argument.vec3())
                         // ENTITY 1 - WITH POS
-                        .then(Commands.argument("entity", EntitySummonArgument.id()).suggests(SuggestionProviders.SUMMONABLE_ENTITIES)
-                                .executes(c -> CommandCAggro.caggro(c.getSource(), Vec3Argument.getVec3(c, "pos"), EntitySummonArgument.getSummonableEntity(c, "entity")))
+                        .then(Commands.argument("entity", ResourceArgument.resource(event.getBuildContext(), Registries.ENTITY_TYPE)).suggests(SuggestionProviders.SUMMONABLE_ENTITIES)
+                                .executes(c -> CommandCAggro.caggro(c.getSource(), Vec3Argument.getVec3(c, "pos"), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity")))
                                 // ENTITY 1 NBT
                                 .then(Commands.argument("nbt", CompoundTagArgument.compoundTag())
-                                        .executes(c -> CommandCAggro.caggro(c.getSource(), Vec3Argument.getVec3(c, "pos"), EntitySummonArgument.getSummonableEntity(c, "entity"), CompoundTagArgument.getCompoundTag(c, "nbt")))
+                                        .executes(c -> CommandCAggro.caggro(c.getSource(), Vec3Argument.getVec3(c, "pos"), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity"), CompoundTagArgument.getCompoundTag(c, "nbt")))
                                         // ENTITY 2 CHAIN - ENTITY 1 NBT
-                                        .then(Commands.argument("entity2", CommandCAggro.EntityAndPlayerArgument.entityAndPlayer()).suggests(CommandCAggro.EntityAndPlayerArgument.SUMMONABLE_ENTITIES_AND_PLAYER)
-                                                .executes(c -> CommandCAggro.caggro(c.getSource(), Vec3Argument.getVec3(c, "pos"), EntitySummonArgument.getSummonableEntity(c, "entity"), CompoundTagArgument.getCompoundTag(c, "nbt"), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity2")))
+                                        .then(Commands.argument("entity2", ResourceArgument.resource(event.getBuildContext(), Registries.ENTITY_TYPE)).suggests(CommandCAggro.EntityAndPlayerArgument.SUMMONABLE_ENTITIES_AND_PLAYER)
+                                                .executes(c -> CommandCAggro.caggro(c.getSource(), Vec3Argument.getVec3(c, "pos"), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity"), CompoundTagArgument.getCompoundTag(c, "nbt"), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity2", true)))
                                                 // HEALTH & DAMAGE
                                                 .then(Commands.argument("health", IntegerArgumentType.integer(1))
-                                                        .executes(c -> CommandCAggro.caggro(c.getSource(), Vec3Argument.getVec3(c, "pos"), EntitySummonArgument.getSummonableEntity(c, "entity"), CompoundTagArgument.getCompoundTag(c, "nbt"), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity2"), IntegerArgumentType.getInteger(c, "health")))
+                                                        .executes(c -> CommandCAggro.caggro(c.getSource(), Vec3Argument.getVec3(c, "pos"), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity"), CompoundTagArgument.getCompoundTag(c, "nbt"), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity2", true), IntegerArgumentType.getInteger(c, "health")))
                                                         .then(Commands.argument("damage", IntegerArgumentType.integer(1))
-                                                                .executes(c -> CommandCAggro.caggro(c.getSource(), Vec3Argument.getVec3(c, "pos"), EntitySummonArgument.getSummonableEntity(c, "entity"), CompoundTagArgument.getCompoundTag(c, "nbt"), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity2"), IntegerArgumentType.getInteger(c, "health"), IntegerArgumentType.getInteger(c, "damage")))
+                                                                .executes(c -> CommandCAggro.caggro(c.getSource(), Vec3Argument.getVec3(c, "pos"), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity"), CompoundTagArgument.getCompoundTag(c, "nbt"), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity2", true), IntegerArgumentType.getInteger(c, "health"), IntegerArgumentType.getInteger(c, "damage")))
                                                         )
                                                 )
                                         )
                                 )
                                 // ENTITY 2 CHAIN - NO ENTITY 1 NBT
-                                .then(Commands.argument("entity2", CommandCAggro.EntityAndPlayerArgument.entityAndPlayer()).suggests(CommandCAggro.EntityAndPlayerArgument.SUMMONABLE_ENTITIES_AND_PLAYER)
-                                        .executes(c -> CommandCAggro.caggro(c.getSource(), Vec3Argument.getVec3(c, "pos"), EntitySummonArgument.getSummonableEntity(c, "entity"), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity2")))
+                                .then(Commands.argument("entity2", ResourceArgument.resource(event.getBuildContext(), Registries.ENTITY_TYPE)).suggests(CommandCAggro.EntityAndPlayerArgument.SUMMONABLE_ENTITIES_AND_PLAYER)
+                                        .executes(c -> CommandCAggro.caggro(c.getSource(), Vec3Argument.getVec3(c, "pos"), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity"), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity2", true)))
                                         // HEALTH & DAMAGE
                                         .then(Commands.argument("health", IntegerArgumentType.integer(1))
-                                                .executes(c -> CommandCAggro.caggro(c.getSource(), Vec3Argument.getVec3(c, "pos"), EntitySummonArgument.getSummonableEntity(c, "entity"), null, CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity2"), IntegerArgumentType.getInteger(c, "health")))
+                                                .executes(c -> CommandCAggro.caggro(c.getSource(), Vec3Argument.getVec3(c, "pos"), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity"), null, CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity2", true), IntegerArgumentType.getInteger(c, "health")))
                                                 .then(Commands.argument("damage", IntegerArgumentType.integer(1))
-                                                        .executes(c -> CommandCAggro.caggro(c.getSource(), Vec3Argument.getVec3(c, "pos"), EntitySummonArgument.getSummonableEntity(c, "entity"), null, CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity2"), IntegerArgumentType.getInteger(c, "health"), IntegerArgumentType.getInteger(c, "damage")))
+                                                        .executes(c -> CommandCAggro.caggro(c.getSource(), Vec3Argument.getVec3(c, "pos"), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity"), null, CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity2", true), IntegerArgumentType.getInteger(c, "health"), IntegerArgumentType.getInteger(c, "damage")))
                                                 )
                                         )
                                 )
                                 // HEALTH & DAMAGE
                                 .then(Commands.argument("health", IntegerArgumentType.integer(1))
-                                        .executes(c -> CommandCAggro.caggro(c.getSource(), Vec3Argument.getVec3(c, "pos"), EntitySummonArgument.getSummonableEntity(c, "entity"), IntegerArgumentType.getInteger(c, "health")))
+                                        .executes(c -> CommandCAggro.caggro(c.getSource(), Vec3Argument.getVec3(c, "pos"), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity"), IntegerArgumentType.getInteger(c, "health")))
                                         .then(Commands.argument("damage", IntegerArgumentType.integer(1))
-                                                .executes(c -> CommandCAggro.caggro(c.getSource(), Vec3Argument.getVec3(c, "pos"), EntitySummonArgument.getSummonableEntity(c, "entity"), IntegerArgumentType.getInteger(c, "health"), IntegerArgumentType.getInteger(c, "damage")))
+                                                .executes(c -> CommandCAggro.caggro(c.getSource(), Vec3Argument.getVec3(c, "pos"), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity"), IntegerArgumentType.getInteger(c, "health"), IntegerArgumentType.getInteger(c, "damage")))
                                         )
                                 )
                         )
                 )
                 // ENTITY 1 - NO POS
-                .then(Commands.argument("entity", EntitySummonArgument.id()).suggests(SuggestionProviders.SUMMONABLE_ENTITIES)
-                        .executes(c -> CommandCAggro.caggro(c.getSource(), c.getSource().getPosition(), EntitySummonArgument.getSummonableEntity(c, "entity")))
+                .then(Commands.argument("entity", ResourceArgument.resource(event.getBuildContext(), Registries.ENTITY_TYPE)).suggests(SuggestionProviders.SUMMONABLE_ENTITIES)
+                        .executes(c -> CommandCAggro.caggro(c.getSource(), c.getSource().getPosition(), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity")))
                         // ENTITY 1 NBT
                         .then(Commands.argument("nbt", CompoundTagArgument.compoundTag())
-                                .executes(c -> CommandCAggro.caggro(c.getSource(), c.getSource().getPosition(), EntitySummonArgument.getSummonableEntity(c, "entity"), CompoundTagArgument.getCompoundTag(c, "nbt")))
+                                .executes(c -> CommandCAggro.caggro(c.getSource(), c.getSource().getPosition(), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity"), CompoundTagArgument.getCompoundTag(c, "nbt")))
                                 // ENTITY 2 CHAIN - ENTITY 1 NBT
-                                .then(Commands.argument("entity2", CommandCAggro.EntityAndPlayerArgument.entityAndPlayer()).suggests(CommandCAggro.EntityAndPlayerArgument.SUMMONABLE_ENTITIES_AND_PLAYER)
-                                        .executes(c -> CommandCAggro.caggro(c.getSource(), c.getSource().getPosition(), EntitySummonArgument.getSummonableEntity(c, "entity"), CompoundTagArgument.getCompoundTag(c, "nbt"), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity2")))
+                                .then(Commands.argument("entity2", ResourceArgument.resource(event.getBuildContext(), Registries.ENTITY_TYPE)).suggests(CommandCAggro.EntityAndPlayerArgument.SUMMONABLE_ENTITIES_AND_PLAYER)
+                                        .executes(c -> CommandCAggro.caggro(c.getSource(), c.getSource().getPosition(), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity"), CompoundTagArgument.getCompoundTag(c, "nbt"), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity2", true)))
                                         // HEALTH & DAMAGE
                                         .then(Commands.argument("health", IntegerArgumentType.integer(1))
-                                                .executes(c -> CommandCAggro.caggro(c.getSource(), c.getSource().getPosition(), EntitySummonArgument.getSummonableEntity(c, "entity"), CompoundTagArgument.getCompoundTag(c, "nbt"), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity2"), IntegerArgumentType.getInteger(c, "health")))
+                                                .executes(c -> CommandCAggro.caggro(c.getSource(), c.getSource().getPosition(), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity"), CompoundTagArgument.getCompoundTag(c, "nbt"), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity2", true), IntegerArgumentType.getInteger(c, "health")))
                                                 .then(Commands.argument("damage", IntegerArgumentType.integer(1))
-                                                        .executes(c -> CommandCAggro.caggro(c.getSource(), c.getSource().getPosition(), EntitySummonArgument.getSummonableEntity(c, "entity"), CompoundTagArgument.getCompoundTag(c, "nbt"), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity2"), IntegerArgumentType.getInteger(c, "health"), IntegerArgumentType.getInteger(c, "damage")))
+                                                        .executes(c -> CommandCAggro.caggro(c.getSource(), c.getSource().getPosition(), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity"), CompoundTagArgument.getCompoundTag(c, "nbt"), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity2", true), IntegerArgumentType.getInteger(c, "health"), IntegerArgumentType.getInteger(c, "damage")))
                                                 )
                                         )
                                 )
                         )
                         // ENTITY 2 CHAIN - NO ENTITY 1 NBT
-                        .then(Commands.argument("entity2", CommandCAggro.EntityAndPlayerArgument.entityAndPlayer()).suggests(CommandCAggro.EntityAndPlayerArgument.SUMMONABLE_ENTITIES_AND_PLAYER)
-                                .executes(c -> CommandCAggro.caggro(c.getSource(), c.getSource().getPosition(), EntitySummonArgument.getSummonableEntity(c, "entity"), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity2")))
+                        .then(Commands.argument("entity2", ResourceArgument.resource(event.getBuildContext(), Registries.ENTITY_TYPE)).suggests(CommandCAggro.EntityAndPlayerArgument.SUMMONABLE_ENTITIES_AND_PLAYER)
+                                .executes(c -> CommandCAggro.caggro(c.getSource(), c.getSource().getPosition(), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity"), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity2", true)))
                                 // HEALTH & DAMAGE
                                 .then(Commands.argument("health", IntegerArgumentType.integer(1))
-                                        .executes(c -> CommandCAggro.caggro(c.getSource(), c.getSource().getPosition(), EntitySummonArgument.getSummonableEntity(c, "entity"), null, CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity2"), IntegerArgumentType.getInteger(c, "health")))
+                                        .executes(c -> CommandCAggro.caggro(c.getSource(), c.getSource().getPosition(), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity"), null, CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity2", true), IntegerArgumentType.getInteger(c, "health")))
                                         .then(Commands.argument("damage", IntegerArgumentType.integer(1))
-                                                .executes(c -> CommandCAggro.caggro(c.getSource(), c.getSource().getPosition(), EntitySummonArgument.getSummonableEntity(c, "entity"), null, CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity2"), IntegerArgumentType.getInteger(c, "health"), IntegerArgumentType.getInteger(c, "damage")))
+                                                .executes(c -> CommandCAggro.caggro(c.getSource(), c.getSource().getPosition(), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity"), null, CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity2", true), IntegerArgumentType.getInteger(c, "health"), IntegerArgumentType.getInteger(c, "damage")))
                                         )
                                 )
                         )
                         // HEALTH & DAMAGE
                         .then(Commands.argument("health", IntegerArgumentType.integer(1))
-                                .executes(c -> CommandCAggro.caggro(c.getSource(), c.getSource().getPosition(), EntitySummonArgument.getSummonableEntity(c, "entity"), IntegerArgumentType.getInteger(c, "health")))
+                                .executes(c -> CommandCAggro.caggro(c.getSource(), c.getSource().getPosition(), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity"), IntegerArgumentType.getInteger(c, "health")))
                                 .then(Commands.argument("damage", IntegerArgumentType.integer(1))
-                                        .executes(c -> CommandCAggro.caggro(c.getSource(), c.getSource().getPosition(), EntitySummonArgument.getSummonableEntity(c, "entity"), IntegerArgumentType.getInteger(c, "health"), IntegerArgumentType.getInteger(c, "damage")))
+                                        .executes(c -> CommandCAggro.caggro(c.getSource(), c.getSource().getPosition(), CommandCAggro.EntityAndPlayerArgument.getSummonableEntity(c, "entity"), IntegerArgumentType.getInteger(c, "health"), IntegerArgumentType.getInteger(c, "damage")))
                                 )
                         )
                 )
@@ -264,7 +256,7 @@ public class CritterFights {
     }
 
     @SubscribeEvent
-    public static void onEntityLoaded(EntityJoinWorldEvent event) {
+    public static void onEntityLoaded(EntityJoinLevelEvent event) {
         String id = CritterFights.getAITag(event.getEntity());
         if (!id.isEmpty() && event.getEntity() instanceof PathfinderMob entity) {
             float damage = CritterFights.getDamageTag(entity);
@@ -388,10 +380,6 @@ public class CritterFights {
         CritterFights.addDamageTag(el, (float) damage);
     }
 
-    public void setup(FMLCommonSetupEvent event) {
-        ArgumentTypes.register("entity_summon_and_player", CommandCAggro.EntityAndPlayerArgument.class, new EmptyArgumentSerializer<>(CommandCAggro.EntityAndPlayerArgument::entityAndPlayer));
-    }
-
     public static class CommandCFight {
 
         private static int cfight(CommandSourceStack source, Vec3 pos, ResourceLocation entity1) {
@@ -463,7 +451,7 @@ public class CritterFights {
                 return e;
             });
             if (!(entity instanceof PathfinderMob) || !(entity2 instanceof PathfinderMob)) {
-                source.sendFailure(new TextComponent("The entity you are trying to fight is not considered a Creature and cannot use attack AI!"));
+                source.sendFailure(Component.literal("The entity you are trying to fight is not considered a Creature and cannot use attack AI!"));
                 if (entity != null)
                     entity.remove(Entity.RemovalReason.DISCARDED);
                 if (entity2 != null)
@@ -480,8 +468,8 @@ public class CritterFights {
             el2.setTarget(el);
             source.getLevel().addFreshEntity(el);
             source.getLevel().addFreshEntity(el2);
-            source.sendSuccess(new TranslatableComponent("commands.summon.success", el.getDisplayName()), true);
-            source.sendSuccess(new TranslatableComponent("commands.summon.success", el2.getDisplayName()), true);
+            source.sendSuccess(Component.translatable("commands.summon.success", el.getDisplayName()), true);
+            source.sendSuccess(Component.translatable("commands.summon.success", el2.getDisplayName()), true);
             return 1;
         }
     }
@@ -534,7 +522,7 @@ public class CritterFights {
                 return e;
             });
             if (!(entity instanceof PathfinderMob el)) {
-                source.sendFailure(new TextComponent("The entity you are trying to fight is not considered a Creature and cannot use attack AI!"));
+                source.sendFailure(Component.literal("The entity you are trying to fight is not considered a Creature and cannot use attack AI!"));
                 if (entity != null)
                     entity.remove(Entity.RemovalReason.DISCARDED);
                 return 0;
@@ -560,45 +548,35 @@ public class CritterFights {
                 }
             }
             source.getLevel().addFreshEntity(el);
-            source.sendSuccess(new TranslatableComponent("commands.summon.success", el.getDisplayName()), true);
+            source.sendSuccess(Component.translatable("commands.summon.success", el.getDisplayName()), true);
             return 1;
         }
 
-        public static class EntityAndPlayerArgument implements ArgumentType<ResourceLocation> {
-
+        public static class EntityAndPlayerArgument extends ResourceArgument {
             public static final SuggestionProvider<CommandSourceStack> SUMMONABLE_ENTITIES_AND_PLAYER = SuggestionProviders.register(new ResourceLocation("summonable_entities_and_player"), (et, builder) ->
-                    SharedSuggestionProvider.suggestResource(ForgeRegistries.ENTITIES.getValues().stream().filter(et2 -> et2.canSummon() || et2 == EntityType.PLAYER), builder, EntityType::getKey, et2 ->
-                            new TranslatableComponent(Util.makeDescriptionId("entity", EntityType.getKey(et2)))
+                    SharedSuggestionProvider.suggestResource(ForgeRegistries.ENTITY_TYPES.getValues().stream().filter(et2 -> et2.canSummon() || et2 == EntityType.PLAYER), builder, EntityType::getKey, et2 ->
+                            Component.translatable(Util.makeDescriptionId("entity", EntityType.getKey(et2)))
                     )
             );
-            public static final DynamicCommandExceptionType ENTITY_UNKNOWN_TYPE = EntitySummonArgument.ERROR_UNKNOWN_ENTITY;
-            private static final Collection<String> EXAMPLES = Arrays.asList("minecraft:pig", "cow");
+            private static final DynamicCommandExceptionType ERROR_NOT_SUMMONABLE_ENTITY = new DynamicCommandExceptionType(c -> Component.translatable("entity.not_summonable", c));
 
-            public static EntityAndPlayerArgument entityAndPlayer() {
-                return new EntityAndPlayerArgument();
+            public EntityAndPlayerArgument(CommandBuildContext p_248597_, ResourceKey p_251778_) {
+                super(p_248597_, p_251778_);
             }
 
             public static ResourceLocation getSummonableEntity(CommandContext<CommandSourceStack> context, String name) throws CommandSyntaxException {
-                return checkIfEntityExists(context.getArgument(name, ResourceLocation.class));
+                return getSummonableEntity(context, name, false);
             }
 
-            private static ResourceLocation checkIfEntityExists(ResourceLocation id) throws CommandSyntaxException {
-                EntityType<?> type = ForgeRegistries.ENTITIES.getValue(id);
-                if (type != null && (type.canSummon() || type == EntityType.PLAYER)) {
-                    return id;
+            public static ResourceLocation getSummonableEntity(CommandContext<CommandSourceStack> context, String name, boolean playerAllowed) throws CommandSyntaxException {
+                Holder.Reference<EntityType<?>> reference = getResource(context, name, Registries.ENTITY_TYPE);
+                if (!reference.value().canSummon() && (!playerAllowed || reference.value() != EntityType.PLAYER)) {
+                    throw ERROR_NOT_SUMMONABLE_ENTITY.create(reference.key().location().toString());
                 } else {
-                    throw ENTITY_UNKNOWN_TYPE.create(id);
+                    return reference.key().location();
                 }
             }
 
-            public ResourceLocation parse(StringReader stringReader) throws CommandSyntaxException {
-                return checkIfEntityExists(ResourceLocation.read(stringReader));
-            }
-
-            @Override
-            public Collection<String> getExamples() {
-                return EXAMPLES;
-            }
         }
     }
 
