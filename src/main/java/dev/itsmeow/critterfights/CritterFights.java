@@ -23,7 +23,6 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.InteractionHand;
-import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.*;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.Attributes;
@@ -32,6 +31,7 @@ import net.minecraft.world.entity.ai.goal.target.HurtByTargetGoal;
 import net.minecraft.world.entity.ai.goal.target.NearestAttackableTargetGoal;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.Vec3;
+import net.minecraftforge.event.ForgeEventFactory;
 import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.event.entity.EntityJoinLevelEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
@@ -346,7 +346,7 @@ public class CritterFights {
                     if (distToEnemySqr <= d0 && this.getTicksUntilNextAttack() <= 0) {
                         this.resetAttackCooldown();
                         this.mob.swing(InteractionHand.MAIN_HAND);
-                        enemy.hurt(DamageSource.mobAttack(this.mob), (float) this.mob.getAttributeValue(Attributes.ATTACK_DAMAGE));
+                        enemy.hurt(enemy.damageSources().mobAttack(this.mob), (float) this.mob.getAttributeValue(Attributes.ATTACK_DAMAGE));
                     }
                 }
             });
@@ -439,14 +439,14 @@ public class CritterFights {
             Entity entity = EntityType.loadEntityRecursive(entity1nbt, source.getLevel(), e -> {
                 e.moveTo(pos.x(), pos.y(), pos.z(), e.getYRot(), e.getXRot());
                 if (e instanceof Mob el && !flag1F) {
-                    el.finalizeSpawn(source.getLevel(), source.getLevel().getCurrentDifficultyAt(new BlockPos(pos)), MobSpawnType.MOB_SUMMONED, null, null);
+                    ForgeEventFactory.onFinalizeSpawn(el, source.getLevel(), source.getLevel().getCurrentDifficultyAt(new BlockPos((int) pos.x, (int) pos.y, (int) pos.z)), MobSpawnType.MOB_SUMMONED, null, null);
                 }
                 return e;
             });
             Entity entity2 = EntityType.loadEntityRecursive(entity2nbt, source.getLevel(), e -> {
                 e.moveTo(pos.x(), pos.y(), pos.z(), e.getYRot(), e.getXRot());
                 if (e instanceof Mob el && !flag2F) {
-                    el.finalizeSpawn(source.getLevel(), source.getLevel().getCurrentDifficultyAt(new BlockPos(pos)), MobSpawnType.MOB_SUMMONED, null, null);
+                    ForgeEventFactory.onFinalizeSpawn(el, source.getLevel(), source.getLevel().getCurrentDifficultyAt(new BlockPos((int) pos.x, (int) pos.y, (int) pos.z)), MobSpawnType.MOB_SUMMONED, null, null);
                 }
                 return e;
             });
@@ -468,8 +468,8 @@ public class CritterFights {
             el2.setTarget(el);
             source.getLevel().addFreshEntity(el);
             source.getLevel().addFreshEntity(el2);
-            source.sendSuccess(Component.translatable("commands.summon.success", el.getDisplayName()), true);
-            source.sendSuccess(Component.translatable("commands.summon.success", el2.getDisplayName()), true);
+            source.sendSuccess(() -> Component.translatable("commands.summon.success", el.getDisplayName()), true);
+            source.sendSuccess(() -> Component.translatable("commands.summon.success", el2.getDisplayName()), true);
             return 1;
         }
     }
@@ -517,7 +517,7 @@ public class CritterFights {
             Entity entity = EntityType.loadEntityRecursive(entity1nbt, source.getLevel(), e -> {
                 e.moveTo(pos.x(), pos.y(), pos.z(), e.getYRot(), e.getXRot());
                 if (e instanceof Mob el && !flagF) {
-                    el.finalizeSpawn(source.getLevel(), source.getLevel().getCurrentDifficultyAt(new BlockPos(pos)), MobSpawnType.MOB_SUMMONED, null, null);
+                    ForgeEventFactory.onFinalizeSpawn(el, source.getLevel(), source.getLevel().getCurrentDifficultyAt(new BlockPos((int) pos.x, (int) pos.y, (int) pos.z)), MobSpawnType.MOB_SUMMONED, null, null);
                 }
                 return e;
             });
@@ -548,7 +548,7 @@ public class CritterFights {
                 }
             }
             source.getLevel().addFreshEntity(el);
-            source.sendSuccess(Component.translatable("commands.summon.success", el.getDisplayName()), true);
+            source.sendSuccess(() -> Component.translatable("commands.summon.success", el.getDisplayName()), true);
             return 1;
         }
 
