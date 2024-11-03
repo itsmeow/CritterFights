@@ -15,8 +15,8 @@ import net.minecraft.commands.arguments.CompoundTagArgument;
 import net.minecraft.commands.arguments.ResourceArgument;
 import net.minecraft.commands.arguments.coordinates.Vec3Argument;
 import net.minecraft.commands.synchronization.SuggestionProviders;
-import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
@@ -31,17 +31,17 @@ import net.minecraft.world.entity.ai.goal.target.HurtByTargetGoal;
 import net.minecraft.world.entity.ai.goal.target.NearestAttackableTargetGoal;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.Vec3;
-import net.minecraftforge.event.ForgeEventFactory;
-import net.minecraftforge.event.RegisterCommandsEvent;
-import net.minecraftforge.event.entity.EntityJoinLevelEvent;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.common.Mod;
-import net.minecraftforge.registries.ForgeRegistries;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.fml.common.Mod;
+import net.neoforged.neoforge.event.EventHooks;
+import net.neoforged.neoforge.event.RegisterCommandsEvent;
+import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
 
 import java.util.HashSet;
 import java.util.Set;
 
-@Mod.EventBusSubscriber(modid = CritterFights.MODID)
+@EventBusSubscriber(modid = CritterFights.MODID)
 @Mod(CritterFights.MODID)
 public class CritterFights {
 
@@ -265,8 +265,8 @@ public class CritterFights {
                 AttributeInstance attr = new AttributeInstance(Attributes.ATTACK_DAMAGE, a -> {
                 });
                 attr.setBaseValue(damage);
-                entity.getAttributes().dirtyAttributes.add(attr);
                 entity.getAttributes().attributes.put(Attributes.ATTACK_DAMAGE, attr);
+                entity.getAttributes().onAttributeModified(attr);
             } else {
                 entity.getAttribute(Attributes.ATTACK_DAMAGE).setBaseValue(damage);
             }
@@ -334,19 +334,19 @@ public class CritterFights {
         Set<WrappedGoal> keepTasks = CritterFights.findAttackTasks(el.goalSelector);
         el.targetSelector.getAvailableGoals().clear();
         el.goalSelector.getAvailableGoals().clear();
-        if (keepTasks.size() > 0) {
+        if (!keepTasks.isEmpty()) {
             for (WrappedGoal taskE : keepTasks) {
                 el.goalSelector.addGoal(0, taskE.getGoal());
             }
         } else {
             el.goalSelector.addGoal(0, new MeleeAttackGoal(el, 1.2D, true) {
                 @Override
-                protected void checkAndPerformAttack(LivingEntity enemy, double distToEnemySqr) {
-                    double d0 = this.getAttackReachSqr(enemy);
-                    if (distToEnemySqr <= d0 && this.getTicksUntilNextAttack() <= 0) {
+                protected void checkAndPerformAttack(LivingEntity target) {
+                    if (this.canPerformAttack(target)) {
                         this.resetAttackCooldown();
                         this.mob.swing(InteractionHand.MAIN_HAND);
-                        enemy.hurt(enemy.damageSources().mobAttack(this.mob), (float) this.mob.getAttributeValue(Attributes.ATTACK_DAMAGE));
+                        this.mob.doHurtTarget(target);
+                        target.hurt(target.damageSources().mobAttack(this.mob), (float) this.mob.getAttributeValue(Attributes.ATTACK_DAMAGE));
                     }
                 }
             });
@@ -375,8 +375,8 @@ public class CritterFights {
         AttributeInstance attr = new AttributeInstance(Attributes.ATTACK_DAMAGE, a -> {
         });
         attr.setBaseValue(damage);
-        el.getAttributes().dirtyAttributes.add(attr);
         el.getAttributes().attributes.put(Attributes.ATTACK_DAMAGE, attr);
+        el.getAttributes().onAttributeModified(attr);
         CritterFights.addDamageTag(el, (float) damage);
     }
 
@@ -439,14 +439,14 @@ public class CritterFights {
             Entity entity = EntityType.loadEntityRecursive(entity1nbt, source.getLevel(), e -> {
                 e.moveTo(pos.x(), pos.y(), pos.z(), e.getYRot(), e.getXRot());
                 if (e instanceof Mob el && !flag1F) {
-                    ForgeEventFactory.onFinalizeSpawn(el, source.getLevel(), source.getLevel().getCurrentDifficultyAt(new BlockPos((int) pos.x, (int) pos.y, (int) pos.z)), MobSpawnType.MOB_SUMMONED, null, null);
+                    EventHooks.finalizeMobSpawn(el, source.getLevel(), source.getLevel().getCurrentDifficultyAt(el.blockPosition()), MobSpawnType.COMMAND, null);
                 }
                 return e;
             });
             Entity entity2 = EntityType.loadEntityRecursive(entity2nbt, source.getLevel(), e -> {
                 e.moveTo(pos.x(), pos.y(), pos.z(), e.getYRot(), e.getXRot());
                 if (e instanceof Mob el && !flag2F) {
-                    ForgeEventFactory.onFinalizeSpawn(el, source.getLevel(), source.getLevel().getCurrentDifficultyAt(new BlockPos((int) pos.x, (int) pos.y, (int) pos.z)), MobSpawnType.MOB_SUMMONED, null, null);
+                    EventHooks.finalizeMobSpawn(el, source.getLevel(), source.getLevel().getCurrentDifficultyAt(el.blockPosition()), MobSpawnType.COMMAND, null);
                 }
                 return e;
             });
@@ -517,7 +517,7 @@ public class CritterFights {
             Entity entity = EntityType.loadEntityRecursive(entity1nbt, source.getLevel(), e -> {
                 e.moveTo(pos.x(), pos.y(), pos.z(), e.getYRot(), e.getXRot());
                 if (e instanceof Mob el && !flagF) {
-                    ForgeEventFactory.onFinalizeSpawn(el, source.getLevel(), source.getLevel().getCurrentDifficultyAt(new BlockPos((int) pos.x, (int) pos.y, (int) pos.z)), MobSpawnType.MOB_SUMMONED, null, null);
+                    EventHooks.finalizeMobSpawn(el, source.getLevel(), source.getLevel().getCurrentDifficultyAt(el.blockPosition()), MobSpawnType.COMMAND, null);
                 }
                 return e;
             });
@@ -553,8 +553,8 @@ public class CritterFights {
         }
 
         public static class EntityAndPlayerArgument extends ResourceArgument {
-            public static final SuggestionProvider<CommandSourceStack> SUMMONABLE_ENTITIES_AND_PLAYER = SuggestionProviders.register(new ResourceLocation("summonable_entities_and_player"), (et, builder) ->
-                    SharedSuggestionProvider.suggestResource(ForgeRegistries.ENTITY_TYPES.getValues().stream().filter(et2 -> et2.canSummon() || et2 == EntityType.PLAYER), builder, EntityType::getKey, et2 ->
+            public static final SuggestionProvider<CommandSourceStack> SUMMONABLE_ENTITIES_AND_PLAYER = SuggestionProviders.register(ResourceLocation.fromNamespaceAndPath("minecraft", "summonable_entities_and_player"), (et, builder) ->
+                    SharedSuggestionProvider.suggestResource(BuiltInRegistries.ENTITY_TYPE.stream().filter(et2 -> et2.canSummon() || et2 == EntityType.PLAYER), builder, EntityType::getKey, et2 ->
                             Component.translatable(Util.makeDescriptionId("entity", EntityType.getKey(et2)))
                     )
             );
